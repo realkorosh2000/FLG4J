@@ -17,7 +17,6 @@ public class FLG {
         return this;
     }
     
-   
     public Object get(String name) {
         return variables.get(formatName(name));
     }
@@ -69,7 +68,7 @@ public class FLG {
         return variables.size();
     }
     
-    // ============== ARRAY SUPPORT ==============
+    // -------------- ARRAY SUPPORT --------------
     
    
     public FLG setArray(String name, Object... items) {
@@ -85,7 +84,7 @@ public class FLG {
         return null;
     }
     
-    // ============== LAMBDA SUPPORT ==============
+    // -------------- LAMBDA SUPPORT --------------
     
     
     public FLG setLambda(String name, String code) {
@@ -93,14 +92,14 @@ public class FLG {
         return this;
     }
     
-    // ============== OVERRIDE SUPPORT ==============
+    // -------------- OVERRIDE SUPPORT --------------
     
     public FLG setOverride(boolean ov) {
         this.overridden = ov;
         return this;
     }
     
-    // ============== SAVE OPERATIONS ==============
+    // -------------- SAVE OPERATIONS --------------
     
     
     public void save(String path) throws IOException {
@@ -137,7 +136,7 @@ public class FLG {
         Files.write(Paths.get(path), toRot(level).getBytes());
     }
     
-    // ============== LOAD OPERATIONS ==============
+    // -------------- LOAD OPERATIONS --------------
     
   
     public static FLG load(String path) throws IOException {
@@ -187,7 +186,7 @@ public class FLG {
         return parse(decoded);
     }
     
-    // ============== ENCODING FUNCTIONS ==============
+    // -------------- ENCODING FUNCTIONS --------------
     
     public String toHex() {
         return Utils.bytesToHex(toString().getBytes());
@@ -218,7 +217,7 @@ public class FLG {
         return Utils.rot(toString(), level);
     }
     
-    // ============== PARSING ==============
+    // -------------- PARSING --------------
     
    
     public static FLG parse(String content) {
@@ -234,24 +233,47 @@ public class FLG {
             
             if (line.startsWith("#")) continue;
             
-            
             if (line.startsWith("@Override")) {
                 nextOverride = true;
                 continue;
             }
             
-            if (line.startsWith("<") && !line.startsWith("</")) {
+            
+            if (line.startsWith("<") && line.contains("</")) {
+                int openEnd = line.indexOf('>');
+                int closeStart = line.indexOf("</");
+                
+                if (openEnd != -1 && closeStart != -1) {
+                    String varName = line.substring(0, openEnd + 1);
+                    String value = line.substring(openEnd + 1, closeStart).trim();
+                    
+                    if (value.contains("#")) {
+                        value = value.substring(0, value.indexOf('#')).trim();
+                    }
+                    
+                    db.set(varName, parseValue(value));
+                    if (nextOverride) {
+                        db.setOverride(true);
+                        nextOverride = false;
+                    }
+                }
+            }
+            
+            else if (line.startsWith("<") && !line.startsWith("</")) {
                 int end = line.indexOf('>');
                 if (end != -1) {
                     String varName = line.substring(0, end + 1);
                     context.push(varName);
                     
-                    
                     String rest = line.substring(end + 1).trim();
+                    
+                    if (rest.contains("#")) {
+                        rest = rest.substring(0, rest.indexOf('#')).trim();
+                    }
+                    
                     if (!rest.isEmpty()) {
                         db.set(varName, parseValue(rest));
                         if (nextOverride) {
-                            
                             db.setOverride(true);
                             nextOverride = false;
                         }
@@ -259,21 +281,28 @@ public class FLG {
                     }
                 }
             }
-           
-            else if (line.startsWith("/<")) {
+            
+            else if (line.startsWith("</")) {
                 if (!context.isEmpty()) {
                     context.pop();
                 }
             }
             
             else if (!context.isEmpty()) {
-                String currentVar = context.peek();
-                Object value = parseValue(line);
-                db.set(currentVar, value);
+               
+                String value = line;
+                if (value.contains("#")) {
+                    value = value.substring(0, value.indexOf('#')).trim();
+                }
                 
-                if (nextOverride) {
-                    db.setOverride(true);
-                    nextOverride = false;
+                if (!value.isEmpty()) {
+                    Object parsed = parseValue(value);
+                    db.set(context.peek(), parsed);
+                    
+                    if (nextOverride) {
+                        db.setOverride(true);
+                        nextOverride = false;
+                    }
                 }
             }
         }
@@ -282,38 +311,44 @@ public class FLG {
     }
     
     private static Object parseValue(String val) {
-        val = val.trim();
-        
-       
-        if (val.startsWith("[") && val.endsWith("]")) {
-            List<Object> list = new ArrayList<>();
-            String inner = val.substring(1, val.length() - 1);
-            String[] items = inner.split(",");
-            for (String item : items) {
-                list.add(parsePrimitive(item.trim()));
-            }
-            return list;
-        }
-        
-       
-        if (val.startsWith("{") && val.endsWith("}")) {
-            return new Lambda(val.substring(1, val.length() - 1));
-        }
-        
-        
-        return parsePrimitive(val);
+    	if (val.startsWith("[") && val.endsWith("]")) {
+    	    String inner = val.substring(1, val.length() - 1).trim();
+    	    List<Object> list = new ArrayList<>();
+    	    
+    	    boolean inQuote = false;
+    	    StringBuilder current = new StringBuilder();
+    	    for (char c : inner.toCharArray()) {
+    	        if (c == '"') {
+    	            inQuote = !inQuote;
+    	            current.append(c);
+    	        } else if (c == ',' && !inQuote) {
+    	            list.add(parsePrimitive(current.toString().trim()));
+    	            current = new StringBuilder();
+    	        } else {
+    	            current.append(c);
+    	        }
+    	    }
+    	    if (current.length() > 0) {
+    	        list.add(parsePrimitive(current.toString().trim()));
+    	    }
+    	    return list;
+    	}
+		return val;
     }
     
     private static Object parsePrimitive(String val) {
-        
+        // Quoted strings
         if (val.startsWith("\"") && val.endsWith("\"")) {
             return val.substring(1, val.length() - 1);
         }
        
+        
         if (val.equals("true")) return true;
         if (val.equals("false")) return false;
         
+        
         if (val.equals("Null") || val.equals("null")) return null;
+        
         
         try {
             if (val.contains(".")) {
@@ -333,7 +368,7 @@ public class FLG {
         return name;
     }
     
-    // ============== OUTPUT ==============
+    // -------------- OUTPUT --------------
     
     @Override
     public String toString() {
@@ -347,22 +382,31 @@ public class FLG {
             sb.append(entry.getKey()).append("\n");
             
             Object val = entry.getValue();
-            if (val instanceof List) {
-                sb.append("    ");
-                sb.append(val.toString()).append("\n");
+            
+           
+            sb.append("    ");
+            
+            if (val == null) {
+                sb.append("null");
+            } else if (val instanceof List) {
+                sb.append(val.toString());
             } else if (val instanceof Lambda) {
-                sb.append("    {").append(((Lambda) val).code).append("}\n");
-            } else if (val != null) {
-                sb.append("    ");
-                if (val instanceof String) {
-                    sb.append("\"").append(val).append("\"");
-                } else {
-                    sb.append(val);
-                }
-                sb.append("\n");
+                sb.append("{").append(((Lambda) val).code).append("}");
+            } else if (val instanceof String) {
+                sb.append("\"").append(val).append("\"");
+            } else {
+                sb.append(val);
             }
             
-            sb.append("/").append(entry.getKey()).append("\n\n");
+            sb.append("\n");
+            
+            
+            String key = entry.getKey();
+            sb.append("<").append(key.substring(1));
+            
+            sb.setLength(sb.length() - 1); 
+            sb.append("</").append(key.substring(1)); 
+            sb.append("\n\n");
         }
         
         return sb.toString();
