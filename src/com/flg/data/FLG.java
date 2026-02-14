@@ -402,7 +402,7 @@ public class FLG {
             
             
             String key = entry.getKey();
-            sb.append("<").append(key.substring(1));
+            sb.append("</").append(tagName).append(">");
             
             sb.setLength(sb.length() - 1); 
             sb.append("</").append(key.substring(1)); 
