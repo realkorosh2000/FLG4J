@@ -379,11 +379,12 @@ public class FLG {
                 sb.append("@Override\n");
             }
             
-            sb.append(entry.getKey()).append("\n");
+            String key = entry.getKey();
+            String tagName = key.substring(1, key.length() - 1);
+            
+            sb.append(key).append("\n");
             
             Object val = entry.getValue();
-            
-           
             sb.append("    ");
             
             if (val == null) {
@@ -400,13 +401,7 @@ public class FLG {
             
             sb.append("\n");
             
-            
-            String key = entry.getKey();
-            sb.append("</").append(tagName).append(">");
-            
-            sb.setLength(sb.length() - 1); 
-            sb.append("</").append(key.substring(1)); 
-            sb.append("\n\n");
+            sb.append("</").append(tagName).append(">\n\n");
         }
         
         return sb.toString();
